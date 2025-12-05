@@ -1,0 +1,60 @@
+{
+  "version": "2.0",
+  "allowed_values": ["bm25", "tfidf", "svm", "faiss", "time_weighted"],
+
+  "signals_spec": {
+    "len_tokens": "Total token count of the query.",
+    "short_query": "Alias for len_tokens; low values favor svm/bm25.",
+    "has_temporal_cue": "True if the query contains explicit temporal markers (e.g., today, yesterday, last week, 2024, 09:30).",
+    "update_verbs": "True if verbs like now/changed/switch/updated/still/anymore appear.",
+    "num_digits": "Number of digit characters in the query.",
+    "has_money": "True if currency markers appear.",
+    "proper_noun": "True if capitalized proper nouns detected.",
+    "quote_like": "True if quoted or code‑like string detected (e.g., \"ACME-42\").",
+    "idf_like_high": "Crude rarity proxy: >=2 tokens look rare (length>=6 or mixed case/symbols).",
+    "idf_like_low": "Crude commonness proxy: many very short tokens (<=3 chars).",
+    "paraphrase_synonym_hint": "True if query hints at similarity/description/summary wording."
+  },
+
+  "decision_rubric": [
+    "If has_temporal_cue OR update_verbs -> time_weighted",
+    "Else if quote_like OR num_digits>=1 OR idf_like_high -> bm25",
+    "Else if paraphrase_synonym_hint OR idf_like_low -> faiss",
+    "Else if short_query<=6 -> svm",
+    "Else -> tfidf"
+  ],
+
+  "tie_breakers": [
+    "If multiple rules match AND has_temporal_cue true, prefer time_weighted.",
+    "If short_query<=4 AND quote_like true, prefer bm25 over svm.",
+    "If both lexical and semantic signals present, prefer faiss for paraphrase‑heavy queries.",
+    "If long query (len_tokens>=12) with no strong signals, prefer tfidf."
+  ],
+
+  "anti_patterns": [
+    "Do not invent retriever names.",
+    "Do not write anything outside the required JSON.",
+    "Do not choose time_weighted without a genuine temporal/recency need.",
+    "Do not pick svm for long queries unless other signals say otherwise."
+  ],
+
+  "output_schema": "Return exactly two keys: {\"retriever\": <one of allowed_values>, \"CoT reasoning\": \"<= 18 words\"}",
+
+  "few_shots": [
+    { "q": "What did I say about booking flights last March?", "label": "time_weighted", "why": "Month in the past; restrict by date." },
+    { "q": "Did I ever say \"prefer aisle seat\"?", "label": "bm25", "why": "Quoted exact phrase → lexical." },
+    { "q": "List all vegan restaurants I mentioned across sessions.", "label": "tfidf", "why": "Breadth/aggregation across many turns." },
+    { "q": "What gift was similar to the headphones I liked?", "label": "faiss", "why": "Paraphrase/semantic similarity." },
+    { "q": "Find other weekend plans similar to the hiking trip I enjoyed.", "label": "svm", "why": "Short similarity intent; margin helpful." },
+    { "q": "What's my current coffee order?", "label": "time_weighted", "why": "Recency dominates." },
+    { "q": "When was the last time I talked about job offers?", "label": "time_weighted", "why": "Explicit 'last time' cue." },
+    { "q": "Count how many times I mentioned being stressed about deadlines.", "label": "tfidf", "why": "Collect all occurrences." },
+    { "q": "Show all times I brought up my parents visiting.", "label": "tfidf", "why": "Enumerate mentions across history." },
+    { "q": "Recommend restaurants I would like based on what I've said before.", "label": "faiss", "why": "Preference semantics." },
+    { "q": "Did I ever mention \"remote work policy\" exactly in those words?", "label": "bm25", "why": "Exact quoted text." },
+    { "q": "Where did I redeem a $5 coupon on coffee creamer?", "label": "bm25", "why": "Store/product + numeric token." },
+    { "q": "Where did I talk about switching my phone plan?", "label": "faiss", "why": "Likely paraphrased mentions." },
+    { "q": "my favorite coffee beans", "label": "svm", "why": "Short topical phrase." },
+    { "q": "How has my ideal vacation spot changed over time?", "label": "time_weighted", "why": "Temporal evolution." }
+  ]
+}
